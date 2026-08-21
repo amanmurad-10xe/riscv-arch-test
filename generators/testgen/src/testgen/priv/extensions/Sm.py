@@ -61,6 +61,7 @@ def _generate_mcause_tests(test_data: TestData) -> list[str]:
         (16, "#ifdef SMDBLTRP_SUPPORTED"),  # Double trap
         (17, "RESERVED"),
         (18, "#if defined(ZICFILP_SUPPORTED) || defined(ZICFISS_SUPPORTED)"),  # software check
+        (19, "#ifdef SM1P13P0_OR_LATER_SUPPORTED"),  # hardware error
         (20, "#ifdef H_SUPPORTED"),  # instruction guest-page fault
         (21, "#ifdef H_SUPPORTED"),  # load guest-page fault
         (22, "#ifdef H_SUPPORTED"),  # virtual instruction
@@ -385,7 +386,7 @@ def _generate_mcsr_tests(test_data: TestData) -> list[str]:
     for csr in csrs:
         lines.extend(csr_access_test(test_data, csr, covergroup, coverpoint))
 
-    lines.append("\n#ifndef SM1P11P0_SUPPORTED")
+    lines.append("\n#ifdef SM1P12P0_OR_LATER_SUPPORTED")
     lines.extend(csr_access_test(test_data, csr_menvcfg, covergroup, coverpoint))
     lines.append("#endif")
 
@@ -407,17 +408,17 @@ def _generate_mcsr_tests(test_data: TestData) -> list[str]:
 
     lines.extend(csr_access_test(test_data, csr_mstatush, covergroup, coverpoint))
 
-    lines.append("\n#ifndef SM1P11P0_SUPPORTED")
+    lines.append("\n#ifdef SM1P12P0_OR_LATER_SUPPORTED")
     lines.extend(csr_access_test(test_data, ("menvcfgh", None), covergroup, coverpoint))
-    lines.append("#endif //  !SM1P11P0_SUPPORTED")
+    lines.append("#endif //  SM1P12P0_OR_LATER_SUPPORTED")
     lines.append("\n#ifdef MSECCFG_SUPPORTED")
     lines.extend(csr_access_test(test_data, ("mseccfgh", None), covergroup, coverpoint))
     lines.append("#endif // MSECCFG")
-    lines.append("\n#ifdef SM1P13P0_SUPPORTED")
+    lines.append("\n#ifdef SM1P13P0_OR_LATER_SUPPORTED")
     lines.extend(csr_access_test(test_data, ("CSR_MEDELEGH", None), covergroup, coverpoint))
     lines.extend(
         [
-            "#endif // SM1P13P0_SUPPORTED",
+            "#endif // SM1P13P0_OR_LATER_SUPPORTED",
             "#endif // xlen = 32",
         ]
     )
@@ -435,7 +436,7 @@ def _generate_mcsr_tests(test_data: TestData) -> list[str]:
     for csr in csrs:
         lines.extend(csr_walk_test(test_data, csr, covergroup, coverpoint))
 
-    lines.append("\n#ifndef SM1P11P0_SUPPORTED")
+    lines.append("\n#ifdef SM1P12P0_OR_LATER_SUPPORTED")
     lines.extend(csr_walk_test(test_data, csr_menvcfg, covergroup, coverpoint))
     lines.append("#endif")
 
@@ -447,9 +448,9 @@ def _generate_mcsr_tests(test_data: TestData) -> list[str]:
     )
 
     lines.extend(csr_walk_test(test_data, csr_mstatush, covergroup, coverpoint))
-    lines.append("\n#ifndef SM1P11P0_SUPPORTED")
+    lines.append("\n#ifdef SM1P12P0_OR_LATER_SUPPORTED")
     lines.extend(csr_walk_test(test_data, csr_menvcfgh, covergroup, coverpoint))
-    lines.append("#endif // !SM1P11P0_SUPPORTED")
+    lines.append("#endif // SM1P12P0_OR_LATER_SUPPORTED")
     lines.append("#endif // __riscv_xlen == 32")
 
     ######################################
@@ -690,7 +691,7 @@ def _generate_mcsr_tests(test_data: TestData) -> list[str]:
     lines.extend(
         [
             "",
-            "#ifdef SM1P13P0_SUPPORTED",
+            "#ifdef SM1P13P0_OR_LATER_SUPPORTED",
         ]
     )
 
@@ -797,7 +798,7 @@ def _generate_mcsr_tests(test_data: TestData) -> list[str]:
     )
 
     test_data.int_regs.return_registers([r_msip, r_msipaddr])
-    lines.append("#endif // SM1P13P0_SUPPORTED")
+    lines.append("#endif // SM1P13P0_OR_LATER_SUPPORTED")
 
     return lines
 
