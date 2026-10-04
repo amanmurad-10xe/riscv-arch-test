@@ -20,6 +20,10 @@ Counteren = Literal["ones", "zeros"]
 
 _COUNTERS = ["cycle", "time", "instret"]
 
+# Instructions retired by one trip round the wfi wait loop in instret_interrupt_tests:
+# LREG, bne, wfi, addi, j. Keep this equal to the loop body; the wait is subtracted using it.
+_WAIT_LOOP_INSNS = 5
+
 
 def _access_counter(
     test_data: TestData, covergroup: str, coverpoint: str, bin_prefix: str, read_reg: int, i: int
@@ -391,7 +395,10 @@ def instret_interrupt_tests(test_data: TestData, covergroup: str, mode: Mode) ->
         (prep,) = _alloc(test_data, 1)
         lines += [f"LI(x{prep}, -1)", *_set_counterens(f"x{prep}", mode)]
         test_data.int_regs.return_registers([prep])
-    tmp, res, scr = _alloc(test_data, 3)
+    # The register pool is small: the three held here plus the three that _instret_case takes is the most it
+    # can hand out at once. wfi_taken allocates its own three (so it can use them as loop scratch and tally),
+    # and res is only allocated for the wrs cases, after addr has been returned.
+    tmp, scr, addr = _alloc(test_data, 3)
 
     cond = "defined(UDB_WFI_FINITE)" + (" && defined(UDB_WFI_U_MODE)" if mode == "U" else "")
     lines += [
@@ -438,35 +445,48 @@ def instret_interrupt_tests(test_data: TestData, covergroup: str, mode: Mode) ->
 
     if mode == "U":
         lines.append("#ifdef UDB_WFI_U_MODE")
+    # How long wfi waits is up to the DUT: it may sleep until the timer fires or return at once, so the number
+    # of times the loop runs differs between DUTs. The loop repeats wfi until the trap count shows the interrupt
+    # was taken, and every trip retires exactly _WAIT_LOOP_INSNS instructions, tallied in `diff`. Subtracting
+    # that tally from the delta leaves only the part that does not depend on timing. Written out here rather
+    # than through _instret_case because the loop borrows its registers: `after` is scratch until it is read,
+    # and `diff` holds the tally until the delta is computed.
+    before, after, diff = _alloc(test_data, 3)
     lines += [
         comment_banner(
             "cp_instret_delta", f"wfi in {mode}-mode: timer interrupt taken during the wait, {csr} delta recorded"
         ),
         "",
-        *_instret_case(
-            test_data,
-            covergroup,
-            "wfi_taken",
-            mode,
-            [
-                "1: wfi  # wait for the timer interrupt",
-                f"LA(x{tmp}, rvtest_trap_count)",
-                f"LREG x{tmp}, 0(x{tmp})",
-                f"beq x{tmp}, x{scr}, 1b",
-            ],
-            setup=[
-                csr_access("csrw mie, zero  # nothing enabled", mode),
-                *(["csrci mstatus, 8  # MIE = 0"] if mode == "M" else []),
-                f"LI(x{tmp}, 0x80)",
-                csr_access(f"csrw mie, x{tmp}  # MTIE only", mode),
-                f"LA(x{scr}, rvtest_trap_count)",
-                f"LREG x{scr}, 0(x{scr})",
-                soon,
-                *(["csrsi mstatus, 8  # MIE = 1"] if mode == "M" else []),
-            ],
-            cleanup=[*(["csrci mstatus, 8  # MIE = 0"] if mode == "M" else []), clr],
-        ),
+        csr_access("csrw mie, zero  # nothing enabled", mode),
+        *(["csrci mstatus, 8  # MIE = 0"] if mode == "M" else []),
+        f"LI(x{after}, 0x80)",
+        csr_access(f"csrw mie, x{after}  # MTIE only", mode),
+        soon,
+        # After the last trap of the setup (T-SBI calls count as traps), so that only the timer
+        # interrupt can change the count from here on.
+        f"LA(x{addr}, rvtest_trap_count)",
+        f"LREG x{scr}, 0(x{addr})  # trap count before waiting",
+        f"LI(x{diff}, 0)  # tally of instructions retired by the wait loop",
+        *(["csrsi mstatus, 8  # MIE = 1"] if mode == "M" else []),
+        test_data.add_testcase(f"{csr}_wfi_taken", "cp_instret_delta", covergroup),
+        csr_access(f"csrr x{before}, {csr}", mode),
+        "1:",
+        f"LREG x{after}, 0(x{addr})  # trap count now",
+        f"bne x{after}, x{scr}, 2f  # timer interrupt has been taken: leave the loop",
+        "wfi  # may sleep until the interrupt, or return early",
+        f"addi x{diff}, x{diff}, {_WAIT_LOOP_INSNS}  # tally what this trip retired",
+        "j 1b",
+        "2:",
+        csr_access(f"csrr x{after}, {csr}", mode),
+        f"sub x{after}, x{after}, x{diff}  # remove the timing-dependent wait",
+        f"sub x{diff}, x{after}, x{before}",
+        write_sigupd(diff, test_data),
+        *(["csrci mstatus, 8  # MIE = 0"] if mode == "M" else []),
+        clr,
+        "",
     ]
+    test_data.int_regs.return_registers([before, after, diff, addr])
+    (res,) = _alloc(test_data, 1)  # lr.w destination for the wrs cases
     if mode == "U":
         lines.append("#endif // UDB_WFI_U_MODE")
 
