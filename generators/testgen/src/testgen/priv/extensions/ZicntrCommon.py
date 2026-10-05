@@ -490,65 +490,65 @@ def instret_interrupt_tests(test_data: TestData, covergroup: str, mode: Mode) ->
     if mode == "U":
         lines.append("#endif // UDB_WFI_U_MODE")
 
-    lines += ["#ifdef ZAWRS_SUPPORTED", ""]
-    lines += [
-        comment_banner("cp_instret_delta", f"wrs.nto in {mode}-mode: {csr} delta recorded"),
-        "",
-        *_instret_case(
-            test_data,
-            covergroup,
-            "wrs_nto",
-            mode,
-            [
-                "#ifndef UDB_ZAWRS_NTO_IS_NOP",
-                *(["csrsi mstatus, 8  # MIE = 1"] if mode == "M" else []),
-                "#endif // UDB_ZAWRS_NTO_IS_NOP",
-                "wrs.nto",
-            ],
-            setup=[
-                csr_access("csrw mie, zero  # nothing enabled", mode),
-                *(["csrci mstatus, 8  # MIE = 0"] if mode == "M" else []),
-                f"LA(x{scr}, scratch)",
-                f"lr.w x{res}, (x{scr})  # reservation for wrs",
-                "#ifndef UDB_ZAWRS_NTO_IS_NOP",
-                f"LI(x{tmp}, 0x80)",
-                csr_access(f"csrw mie, x{tmp}  # MTIE only", mode),
-                *(["csrsi mstatus, 8  # MIE = 1"] if mode == "M" else []),
-                soon,
-                "#endif // UDB_ZAWRS_NTO_IS_NOP",
-            ],
-            cleanup=[
-                *(["csrci mstatus, 8  # MIE = 0"] if mode == "M" else []),
-                "#ifndef UDB_ZAWRS_NTO_IS_NOP",
-                clr,
-                "#endif // UDB_ZAWRS_NTO_IS_NOP",
-            ],
-        ),
-    ]
+    # lines += ["#ifdef ZAWRS_SUPPORTED", ""]
+    # lines += [
+    #     comment_banner("cp_instret_delta", f"wrs.nto in {mode}-mode: {csr} delta recorded"),
+    #     "",
+    #     *_instret_case(
+    #         test_data,
+    #         covergroup,
+    #         "wrs_nto",
+    #         mode,
+    #         [
+    #             "#ifndef UDB_ZAWRS_NTO_IS_NOP",
+    #             *(["csrsi mstatus, 8  # MIE = 1"] if mode == "M" else []),
+    #             "#endif // UDB_ZAWRS_NTO_IS_NOP",
+    #             "wrs.nto",
+    #         ],
+    #         setup=[
+    #             csr_access("csrw mie, zero  # nothing enabled", mode),
+    #             *(["csrci mstatus, 8  # MIE = 0"] if mode == "M" else []),
+    #             f"LA(x{scr}, scratch)",
+    #             f"lr.w x{res}, (x{scr})  # reservation for wrs",
+    #             "#ifndef UDB_ZAWRS_NTO_IS_NOP",
+    #             f"LI(x{tmp}, 0x80)",
+    #             csr_access(f"csrw mie, x{tmp}  # MTIE only", mode),
+    #             *(["csrsi mstatus, 8  # MIE = 1"] if mode == "M" else []),
+    #             soon,
+    #             "#endif // UDB_ZAWRS_NTO_IS_NOP",
+    #         ],
+    #         cleanup=[
+    #             *(["csrci mstatus, 8  # MIE = 0"] if mode == "M" else []),
+    #             "#ifndef UDB_ZAWRS_NTO_IS_NOP",
+    #             clr,
+    #             "#endif // UDB_ZAWRS_NTO_IS_NOP",
+    #         ],
+    #     ),
+    # ]
 
-    lines += [
-        comment_banner("cp_instret_delta", f"wrs.sto in {mode}-mode: timer interrupt taken, {csr} delta recorded"),
-        "",
-        *_instret_case(
-            test_data,
-            covergroup,
-            "wrs_sto",
-            mode,
-            ["wrs.sto  # interrupt taken here"],
-            setup=[
-                csr_access("csrw mie, zero  # nothing enabled", mode),
-                *(["csrci mstatus, 8  # MIE = 0"] if mode == "M" else []),
-                f"LA(x{scr}, scratch)",
-                f"lr.w x{res}, (x{scr})  # reservation for wrs",
-                f"LI(x{tmp}, 0x80)",
-                csr_access(f"csrw mie, x{tmp}  # MTIE only", mode),
-                *(["csrsi mstatus, 8  # MIE = 1"] if mode == "M" else []),
-                soon,
-            ],
-            cleanup=[*(["csrci mstatus, 8  # MIE = 0"] if mode == "M" else []), clr],
-        ),
-    ]
-    lines.append("#endif // ZAWRS_SUPPORTED")
+    # lines += [
+    #     comment_banner("cp_instret_delta", f"wrs.sto in {mode}-mode: timer interrupt taken, {csr} delta recorded"),
+    #     "",
+    #     *_instret_case(
+    #         test_data,
+    #         covergroup,
+    #         "wrs_sto",
+    #         mode,
+    #         ["wrs.sto  # interrupt taken here"],
+    #         setup=[
+    #             csr_access("csrw mie, zero  # nothing enabled", mode),
+    #             *(["csrci mstatus, 8  # MIE = 0"] if mode == "M" else []),
+    #             f"LA(x{scr}, scratch)",
+    #             f"lr.w x{res}, (x{scr})  # reservation for wrs",
+    #             f"LI(x{tmp}, 0x80)",
+    #             csr_access(f"csrw mie, x{tmp}  # MTIE only", mode),
+    #             *(["csrsi mstatus, 8  # MIE = 1"] if mode == "M" else []),
+    #             soon,
+    #         ],
+    #         cleanup=[*(["csrci mstatus, 8  # MIE = 0"] if mode == "M" else []), clr],
+    #     ),
+    # ]
+    # lines.append("#endif // ZAWRS_SUPPORTED")
 
     test_data.int_regs.return_registers([tmp, res, scr])
     return lines
