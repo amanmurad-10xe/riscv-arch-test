@@ -220,12 +220,12 @@ def _instret_wait_case(test_data: TestData, covergroup: str, name: str, mode: Mo
     reserve = wait.startswith("wrs")
     before, after, diff = _alloc(test_data, 3)
     scr, addr = _alloc(test_data, 2)
-    rsv = _alloc(test_data, 1)[0] if reserve else None
+    rsv_regs = _alloc(test_data, 1) if reserve else []
 
     trip = [
         f"LREG x{after}, 0(x{addr})  # trap count now",
         f"bne x{after}, x{scr}, 2f  # timer interrupt has been taken: leave the loop",
-        *([f"lr.w x{after}, (x{rsv})  # (re)take the reservation the wait needs"] if reserve else []),
+        *([f"lr.w x{after}, (x{rsv_regs[0]})  # (re)take the reservation the wait needs"] if reserve else []),
         f"{wait}  # may stall until the interrupt, or return early",
     ]
     insns_per_trip = len(trip) + 2  # plus the addi and j below
@@ -241,7 +241,7 @@ def _instret_wait_case(test_data: TestData, covergroup: str, name: str, mode: Mo
         f"LA(x{addr}, rvtest_trap_count)",
         f"LREG x{scr}, 0(x{addr})  # trap count before waiting",
         f"LI(x{diff}, 0)  # tally of instructions retired by the wait loop",
-        *([f"LA(x{rsv}, scratch)  # reservation address"] if reserve else []),
+        *([f"LA(x{rsv_regs[0]}, scratch)  # reservation address"] if reserve else []),
         *(["csrsi mstatus, 8  # MIE = 1"] if mode == "M" else []),
         test_data.add_testcase(f"{csr}_{name}", "cp_instret_delta", covergroup),
         csr_access(f"csrr x{before}, {csr}", mode),
@@ -258,7 +258,7 @@ def _instret_wait_case(test_data: TestData, covergroup: str, name: str, mode: Mo
         clr,
         "",
     ]
-    test_data.int_regs.return_registers([before, after, diff, scr, addr, *([rsv] if reserve else [])])
+    test_data.int_regs.return_registers([before, after, diff, scr, addr, *rsv_regs])
     return lines
 
 
