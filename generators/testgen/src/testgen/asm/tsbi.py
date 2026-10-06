@@ -108,6 +108,7 @@ _CSR_ALIASES = {
     "mie": 0x304,
     "mtvec": 0x305,
     "mcounteren": 0x306,
+    "mcountinhibit": 0x320,
     "mscratch": 0x340,
     "mepc": 0x341,
     "mcause": 0x342,
