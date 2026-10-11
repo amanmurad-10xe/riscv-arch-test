@@ -226,6 +226,12 @@
 #define TSBI_RESERVED_RET   (-1)                 // return value for unrecognized operations
 
 //==============================================================================
+// SDTRIG trigger-breakpoint EPC handling.
+// a1 carries a one-shot indication from the test to the trap handler.
+#define SDTRIG_BP_NONE  0
+#define SDTRIG_BP_SKIP  1
+#define SDTRIG_BP_FETCH 2
+
 // SECTION 5: MODE ENCODING CONSTANTS
 //
 // These constants encode privilege modes in various formats:
@@ -2124,6 +2130,7 @@ tsbi_instr_table:
         //TSBI_CSR_INSTR_TABLE(0x105) // stvec
         TSBI_CSR_INSTR_TABLE(0x106) // scounteren
         TSBI_CSR_INSTR_TABLE(0x10A) // senvcfg
+        TSBI_CSR_INSTR_TABLE(0x143) // stval
         TSBI_CSR_INSTR_TABLE(0x144) // sip
         TSBI_CSR_INSTR_TABLE(0x14D) // stimecmp
         #ifdef SSAIA_SUPPORTED
@@ -2399,6 +2406,58 @@ sv_\__MODE__\()cause:
 //==============================================================================
 
 common_\__MODE__\()excpt_handler:
+
+#ifdef SDTRIG_TRIGGER_BP_HANDLING
+        li      T2, CAUSE_BREAKPOINT
+        bne     T5, T2, sdtrig_\__MODE__\()bp_done   // not a breakpoint -> ordinary path
+  .ifc \__MODE__ , M
+        csrr    T2, tdata1                  // tselect still selects the trigger under test
+        srli    T2, T2, UDB_MXLEN-4         // tdata1.type
+        li      T6, 4                       // itrigger
+        beq     T2, T6, skp_adj_\__MODE__\()epc
+        li      T6, 5                       // etrigger
+        bne     T2, T6, sdtrig_\__MODE__\()bp_done
+  .endif
+        li      T2, SDTRIG_BP_FETCH
+        beq     a1, T2, sdtrig_\__MODE__\()bp_fetch
+        li      T2, SDTRIG_BP_SKIP
+        bne     a1, T2, sdtrig_\__MODE__\()bp_done   // a1==NONE (incl. real ebreak) -> ordinary path
+        li      a1, SDTRIG_BP_NONE                    // consume: one-shot
+        j       skpsv_\__MODE__\()epc                 // skip word-2 self-check only; EPC is
+                                                        // valid, so the normal width probe below
+                                                        // still runs and still advances it
+sdtrig_\__MODE__\()bp_fetch:
+        li      a1, SDTRIG_BP_NONE                    // consume: one-shot
+
+  .ifc \__MODE__ , M
+
+        csrw    CSR_MEPC, ra
+
+        // A delegated instruction-page fault has not entered Strampoline yet.
+        csrr    T2, CSR_MEDELEG
+        li      T6, (1 << CAUSE_FETCH_PAGE_FAULT)
+        and     T2, T2, T6
+        beqz    T2, skp_adj_\__MODE__\()epc
+
+        csrr    T2, CSR_STVEC
+        andi    T2, T2, -4
+        csrw    CSR_MEPC, T2
+
+        LI(     T2, MSTATUS_MPP)
+        csrc    CSR_MSTATUS, T2
+        LI(     T2, MPP_SMODE)
+        csrs    CSR_MSTATUS, T2
+
+        j       skp_adj_\__MODE__\()epc
+
+  .else
+
+        csrw    CSR_XEPC, ra
+        j       skp_adj_\__MODE__\()epc
+
+  .endif
+sdtrig_\__MODE__\()bp_done:
+#endif
         csrr    T3, CSR_XEPC                         // T3 = xEPC (faulting instruction address)
 
 sv_\__MODE__\()epc:
